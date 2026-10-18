@@ -49,6 +49,18 @@ h1::after {
 .col { display: flex; flex-direction: column; gap: 16px; }
 .fld { display: flex; flex-direction: column; gap: 7px; }
 .fld > span { font-size: 12.5px; color: var(--dim); letter-spacing: .3px; }
+.fld-hd { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+
+/* 小按钮：只出现在标签行里，别抢正文的视觉重量 */
+button.mini {
+  padding: 2px 9px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  border-radius: 6px;
+  color: var(--dim);
+  background: transparent;
+}
+button.mini:hover { color: var(--tx); background: #2a303a; }
 
 #lyr { height: 190px; resize: none; font-family: var(--mono); font-size: 14px; line-height: 1.9; }
 

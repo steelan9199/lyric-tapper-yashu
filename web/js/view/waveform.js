@@ -7,8 +7,10 @@
 const C = {
   axis: '#242a34',
   wave: '#3c4552',
-  mark: 'rgba(224,99,47,.85)',
-  band: 'rgba(224,99,47,.07)',
+  mark: 'rgba(224,99,47,.78)',
+  markFar: 'rgba(224,99,47,.22)',
+  band: 'rgba(224,99,47,.13)',
+  bandEdge: 'rgba(224,99,47,.55)',
 };
 
 /**
@@ -50,19 +52,37 @@ export function paintWave(canvas, vm) {
   }
 
   if (dur) {
+    // 时间轴现在放大的是哪一段：整条波形上标出这段，人就不会把「放大后的 5 个字」
+    // 误当成「整首歌的前 5 个字」
     const band = vm.focus;
     if (band && band.e > band.s) {
       const x0 = Math.max(0, (band.s / dur) * w);
       const x1 = Math.min(w, (band.e / dur) * w);
       g.fillStyle = C.band;
       g.fillRect(x0, 0, x1 - x0, h);
+      g.fillStyle = C.bandEdge;
+      g.fillRect(Math.round(x0), 0, 1, h);
+      g.fillRect(Math.round(x1) - 1, 0, 1, h);
     }
 
-    g.fillStyle = C.mark;
-    for (const m of vm.marks || []) {
-      const x = Math.round((m.t / dur) * w);
-      if (x < 0 || x >= w) continue;
-      g.fillRect(x, mid - h * 0.46, m.sel ? 2 : 1, h * 0.92);
+    // 打点竖线。挤在一起（<2px）只画一根，否则会糊成一条橙色带，看着像渲染坏了。
+    // 当前放大区间之外的画淡一点：它们只是背景信息，不该抢戏。
+    const bandPx = band && band.e > band.s
+      ? [(band.s / dur) * w, (band.e / dur) * w]
+      : null;
+
+    for (const pass of [0, 1]) {
+      g.fillStyle = pass ? C.mark : C.markFar;
+      let lastX = -99;
+      for (const m of vm.marks || []) {
+        const x = Math.round((m.t / dur) * w);
+        if (x < 0 || x >= w) continue;
+        const inside = !bandPx || (x >= bandPx[0] && x <= bandPx[1]);
+        if (inside !== !!pass) continue;
+        if (x - lastX < 2) continue;
+        lastX = x;
+        g.fillRect(x, mid - h * 0.46, m.sel ? 2 : 1, h * 0.92);
+      }
     }
   }
 }

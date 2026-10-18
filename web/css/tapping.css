@@ -1,4 +1,23 @@
-/* ② 打轴屏：大字舞台 */
+/* ② 打轴屏：大字舞台 + 右侧捕获面板 */
+
+/* 波形 → 时间轴 → 大字：这三块是「看着音频打轴」的一组，必须挨着。
+   所以大字不再垂直居中，而是紧贴时间轴；剩下的空白留给底部提示。 */
+#tapping .stage { flex: 0 0 auto; align-items: flex-start; padding: 16px 24px 6px; }
+#tapping .grow { flex: 1 1 auto; min-height: 0; }
+
+/* 波形占满宽，下面是「舞台 | 捕获」两栏 */
+.tap-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 292px;
+  min-height: 0;
+}
+.tap-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
 
 .stage {
   flex: 1;
@@ -62,5 +81,29 @@
 }
 .hud b { color: var(--tx); font-weight: 600; }
 
-.keys { flex: 0 0 auto; text-align: center; padding: 0 18px 8px; color: var(--dim); font-size: 12.5px; }
-.tip { flex: 0 0 auto; text-align: center; padding: 0 18px 16px; color: var(--acc2); font-size: 13px; min-height: 22px; }
+.keys {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 5px 12px;
+  padding: 0 18px 10px;
+  color: var(--dim);
+  font-size: 12px;
+}
+/* 键位按「条目」换行，不会把 `<kbd>` 和说明拆到两行 */
+.keys .k {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+.hud-state { font-family: var(--mono); color: var(--dim); }
+.hud-state.playing { color: var(--ok); }
+.tip { flex: 0 0 auto; text-align: center; padding: 0 18px 14px; color: var(--acc2); font-size: 13px; min-height: 22px; }
+
+/* 窄屏：让出舞台，捕获面板收起来（面板是辅助，不该挤掉大字） */
+@media (max-width: 900px) {
+  .tap-body { grid-template-columns: minmax(0, 1fr); }
+  .rail { display: none; }
+}

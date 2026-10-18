@@ -11,9 +11,11 @@ import assert from 'node:assert/strict';
 import { tokenize, splitLyrics } from '../web/js/core/text.js';
 import {
   buildLines, rebuildSeq, tapCurrent, undoStep, skipRestOfLine,
-  clearLine, lineSpan, stampOf, currentRef,
+  clearLine, lineSpan, stampOf, currentRef, setLineEnd, unitSpans, MAX_UNIT_DUR,
+  previewSpans, fillLineEven, setUnitStart, setUnitEnd, MIN_UNIT,
 } from '../web/js/core/lines.js';
 import { buildSongJson } from '../web/js/export/songJson.js';
+import { FPS, FRAME, frames } from '../web/js/core/time.js';
 
 /* ── 造一个最小 state ── */
 function makeState(raw, dur = 30) {
@@ -169,4 +171,118 @@ test('offsetMs 原样进 JSON，且已算进每个 t', () => {
   const j = buildSongJson(s);
   assert.equal(j.offsetMs, -100);
   assert.equal(j.lyrics[0].start, 0.9);
+});
+
+/* ══════════ 收句：句尾真实终点 ══════════ */
+test('收句记录的真实终点优先于公式估的 end', () => {
+  const s = makeState('灯一盏');
+  tapAll(s, [1.0, 1.5, 2.0]);
+  const before = buildSongJson(s).lyrics[0].end;
+  setLineEnd(s, 0, 2.6);
+  const after = buildSongJson(s).lyrics[0].end;
+  assert.equal(after, 2.6);
+  assert.notEqual(before, after);
+});
+
+test('收句时间早于首字时被拉回首字之后，不会负时长', () => {
+  const s = makeState('灯一盏');
+  tapAll(s, [3.0, 3.4, 3.8]);
+  const r = setLineEnd(s, 0, 2.0);
+  assert.ok(r.end > 3.0);
+  assert.ok(buildSongJson(s).lyrics[0].end > buildSongJson(s).lyrics[0].start);
+});
+
+test('一个字都没打的句子收不了句', () => {
+  const s = makeState('灯');
+  assert.equal(setLineEnd(s, 0, 5), null);
+});
+
+/* ══════════ 缝隙：长停顿不该把前一个字拉亮到底 ══════════ */
+test('两个字的间隔超过上限时，前一个字的 e 被收住', () => {
+  const s = makeState('灯一盏');
+  tapAll(s, [1.0, 1.5, 4.0]);   // 「一」→「盏」间隔 2.5s，中间是停顿
+  const words = buildSongJson(s).lyrics[0].words;
+  const one = words.find(w => w && w.w === '一');
+  assert.ok(one.e - one.t <= MAX_UNIT_DUR + 1e-6, `e-t=${one.e - one.t}`);
+  assert.ok(one.e < words.find(w => w && w.w === '盏').t, '停顿处应该留白');
+});
+
+test('每个字都带 e，且 e > t', () => {
+  const s = makeState('灯一盏把夜');
+  tapAll(s, [1, 1.4, 1.8, 2.2, 2.6]);
+  for (const w of buildSongJson(s).lyrics[0].words.filter(Boolean)) {
+    assert.ok(Number.isFinite(w.e), `${w.w} 缺 e`);
+    assert.ok(w.e > w.t, `${w.w} e=${w.e} <= t=${w.t}`);
+  }
+});
+
+test('unitSpans 能报出长间隙的间隔', () => {
+  const s = makeState('灯一盏');
+  tapAll(s, [1.0, 1.5, 4.0]);
+  const spans = unitSpans(s, 0);
+  assert.equal(spans[1].dt, 2.5);
+  assert.equal(spans[2].dt, null);   // 句末没有下一个字
+});
+
+/* ══════════ 帧粒度 ══════════ */
+test('30fps 下 1 帧 = 1/30 秒，10 帧 = 0.333 秒', () => {
+  assert.equal(FPS, 30);
+  assert.ok(Math.abs(FRAME - 1 / 30) < 1e-9, `FRAME=${FRAME}`);
+  assert.equal(frames(10), 0.333);
+  assert.equal(frames(-3), -0.1);
+});
+
+/* ══════════ 时间轴：均分草案 / 拖左右边 ══════════ */
+test('没打点的句子，草案按等长均分且首尾相接', () => {
+  const s = makeState('分手吧');
+  const sp = previewSpans(s, 0);
+  assert.equal(sp.length, 3);
+  assert.equal(sp[0].t, 0);
+  const w0 = sp[0].e - sp[0].t;
+  for (const x of sp) assert.ok(Math.abs((x.e - x.t) - w0) < 1e-6, '宽度不一致');
+  assert.equal(sp[0].real, false);
+});
+
+test('第一次拖动把整句均分落成真实值，pos 跟着往前走', () => {
+  const s = makeState('分手吧');
+  fillLineEven(s, 0);
+  assert.ok(s.lines[0].units.every(u => u.t != null && u.e != null));
+  assert.equal(s.pos, 3);
+});
+
+test('拖右边不能越过下一个字的左边（分.e <= 手.t）', () => {
+  const s = makeState('分手吧');
+  fillLineEven(s, 0);
+  const handT = s.lines[0].units[1].t;
+  setUnitEnd(s, 0, 0, 99);
+  assert.equal(s.lines[0].units[0].e, handT);
+  assert.ok(s.lines[0].units[0].e <= s.lines[0].units[1].t);
+});
+
+test('拖左边不能越过上一个字的右边，也不能短于最小长度', () => {
+  const s = makeState('分手吧');
+  fillLineEven(s, 0);
+  const [a, b] = s.lines[0].units;
+  setUnitStart(s, 0, 1, -99);
+  assert.equal(b.t, a.e);
+  setUnitStart(s, 0, 1, 99);
+  assert.ok(b.e - b.t >= MIN_UNIT - 1e-6, `长度 ${b.e - b.t}`);
+});
+
+test('拖出来的终点会进导出的 words[i].e', () => {
+  const s = makeState('分手吧');
+  fillLineEven(s, 0);
+  setUnitEnd(s, 0, 0, 0.2);
+  const w = buildSongJson(s).lyrics[0].words[0];
+  assert.equal(w.e, 0.2);
+  assert.ok(w.t < w.e);
+});
+
+test('拖动后导出仍然逐字单调、且终点不超过下一个字', () => {
+  const s = makeState('分手吧');
+  fillLineEven(s, 0);
+  setUnitEnd(s, 0, 1, 0.55);
+  const words = buildSongJson(s).lyrics[0].words.filter(Boolean);
+  for (let i = 1; i < words.length; i++) assert.ok(words[i].t >= words[i - 1].t);
+  for (let i = 1; i < words.length; i++) assert.ok(words[i - 1].e <= words[i].t + 1e-6);
 });

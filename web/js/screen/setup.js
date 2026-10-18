@@ -5,6 +5,7 @@
 import { $, esc, fmtClock } from '../core/dom.js';
 import { buildLines, rebuildSeq } from '../core/lines.js';
 import { computePeaks } from '../core/peaks.js';
+import { loadLyrics, saveLyrics } from '../core/store.js';
 
 export function createSetupScreen(ctx) {
   const { state, player, api, nav } = ctx;
@@ -77,7 +78,27 @@ export function createSetupScreen(ctx) {
   }));
   drop.addEventListener('drop', e => onPick(e.dataTransfer.files[0]));
   fileIn.addEventListener('change', () => onPick(fileIn.files[0]));
-  lyr.addEventListener('input', refreshHint);
+  /* ── 歌词记忆：贴过一次就不用再贴 ── */
+  let saveTimer = 0;
+  const remember = () => {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => saveLyrics(lyr.value), 250);
+  };
+
+  lyr.addEventListener('input', () => { refreshHint(); remember(); });
+
+  $('#lyrClear').addEventListener('click', () => {
+    lyr.value = '';
+    saveLyrics('');
+    refreshHint();
+    lyr.focus();
+  });
+
+  // 进来先回填上次的歌词（用户已经动过就不覆盖）
+  if (!lyr.value.trim()) {
+    const kept = loadLyrics();
+    if (kept) { lyr.value = kept; refreshHint(); }
+  }
 
   /* ── 已有存档 ── */
   async function loadResume() {
@@ -109,6 +130,7 @@ export function createSetupScreen(ctx) {
       state.offsetMs = d.offsetMs || 0;
       nameIn.value = name;
       lyr.value = (d.lyrics || []).map(L => L.text).join('\n');
+      saveLyrics(lyr.value);
       if (d.audio) {
         state.fileName = d.audio;
         player.load(api.audioURL(d.audio));

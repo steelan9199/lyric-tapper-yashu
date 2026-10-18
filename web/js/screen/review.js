@@ -4,6 +4,7 @@
  * 这一屏最容易越写越胖，所以把「表格怎么排」推给了 view/reviewTable.js，
  * 「文件怎么生成」推给了 export/。这里只做编排。
  */
+import { FRAME } from '../core/time.js';
 import { $, setText } from '../core/dom.js';
 import { stampOf, lineSpan, clearLine } from '../core/lines.js';
 import { mountLine, paintAtTime } from '../view/lineView.js';
@@ -220,7 +221,7 @@ export function createReviewScreen(ctx) {
         case 'ArrowLeft':
         case 'ArrowRight': {
           const dir = e.key === 'ArrowRight' ? 1 : -1;
-          if (state.pick) nudge(dir, e.shiftKey ? 0.05 : 0.01);
+          if (state.pick) nudge(dir, e.shiftKey ? 10 * FRAME : FRAME);
           else stepLine(dir);
           return true;
         }

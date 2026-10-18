@@ -1,0 +1,124 @@
+/* 时间轴：一个字一个矩形，一上一下交错，左右边可拖 */
+
+.tl {
+  position: relative;
+  flex: 0 0 auto;
+  height: 92px;
+  margin: 0 18px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* 上下两行：分在上、手在下，边就不会撞在一起 */
+.tl-box {
+  position: absolute;
+  height: 34px;
+  min-width: 18px;
+  border: 1.5px solid;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+  transition: background .1s, box-shadow .1s;
+}
+.tl-box.up { top: 4px; }
+.tl-box.down { top: 50px; }
+
+/* 相邻两个字换色：青绿 / 琥珀，深色底上都够亮 */
+.tl-box.a {
+  border-color: #35c08f;
+  background: rgba(53, 192, 143, .14);
+  color: #d8fff1;
+}
+.tl-box.b {
+  border-color: #e0a53a;
+  background: rgba(224, 165, 58, .14);
+  color: #ffeccb;
+}
+
+/* 还没落定的字（只是预览的均分位置）用虚线，一眼能看出「还没定」 */
+.tl-box.ghost {
+  border-style: dashed;
+  background: rgba(255, 255, 255, .03);
+  opacity: .72;
+}
+
+.tl-box.cur { box-shadow: 0 0 0 2px rgba(255, 255, 255, .5); }
+.tl-box.hot { box-shadow: 0 0 0 2px #fff; }
+
+.tl-ch {
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 0 7px;
+  white-space: nowrap;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* 左右两条抓取带：比线宽，好点中 */
+.tl-h {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 11px;
+  cursor: col-resize;
+  touch-action: none;
+}
+.tl-h.l { left: -6px; }
+.tl-h.r { right: -6px; }
+
+.tl-h::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: #fff;
+  opacity: .26;
+  transition: opacity .1s;
+}
+.tl-h:hover::after { opacity: .95; }
+.tl.dragging .tl-h::after { opacity: .08; }
+.tl-box.hot .tl-h::after { opacity: 1; }
+
+/* 选中：整块盖一圈白环（外面 2px 留白，深色底上一眼能看见）
+   sel = 选中整块；sel-l / sel-r = 再指定了要调哪条边 */
+.tl-box.sel,
+.tl-box.sel-l,
+.tl-box.sel-r {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+  z-index: 2;
+}
+.tl-box.sel { background: rgba(255, 255, 255, .10); }
+.tl-box.sel .tl-ch,
+.tl-box.sel-l .tl-ch,
+.tl-box.sel-r .tl-ch { color: #fff; }
+
+/* 被指定的那条边：压一条竖白条，和键盘的 ←/→ 对应 */
+.tl-box.sel-l .tl-h.l::after,
+.tl-box.sel-r .tl-h.r::after {
+  opacity: 1;
+  width: 5px;
+  height: 34px;
+  border-radius: 2px;
+  background: #fff;
+  box-shadow: 0 0 8px rgba(255, 255, 255, .65);
+}
+
+/* 播放头 */
+.tl-head {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  margin-left: -1px;
+  background: var(--acc2);
+  opacity: .55;
+  pointer-events: none;
+}

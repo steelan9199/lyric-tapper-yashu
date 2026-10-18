@@ -12,7 +12,7 @@
 <section id="setup" class="screen on">
   <div class="wrap">
     <h1>本地打轴页</h1>
-    <p class="sub">给一段 ≤1 分钟的歌曲片段打<b>逐字</b>时间轴。跟着唱按空格，一个字一下。</p>
+    <p class="sub">给一段 ≤1 分钟的歌曲片段打<b>逐字</b>时间轴。<b>空格</b>播放/暂停，跟着唱，唱到哪个字按一下 <b>F</b>。</p>
 
     <div id="drop" class="drop" tabindex="0">
       <div class="drop-ico">♪</div>
@@ -23,7 +23,10 @@
 
     <div class="grid2">
       <label class="fld">
-        <span>歌词（一行一句，标点照常写）</span>
+        <span class="fld-hd">
+          歌词（一行一句，标点照常写）
+          <button id="lyrClear" class="mini" type="button" title="只清空歌词，不动存档">清空</button>
+        </span>
         <textarea id="lyr" spellcheck="false" placeholder="灯一盏一盏
 把夜点成河
 我数着浪
@@ -61,24 +64,40 @@
     <div id="playhead"></div>
   </div>
 
-  <div class="stage">
-    <div id="lineText" class="line"></div>
-  </div>
+  <div class="tap-body">
+    <div class="tap-main">
+      <div id="tl" class="tl" title="拖左右边改这个字的起止；点一下跳到这个字"></div>
 
-  <div class="hud">
-    <span id="hudLine"></span>
-    <span id="hudPos"></span>
-  </div>
+      <div class="stage">
+        <div id="lineText" class="line"></div>
+      </div>
 
-  <div class="keys">
-    <kbd>空格</kbd> 下一个字
-    <kbd>Backspace</kbd> 退一个字（会一起回放）
-    <kbd>Enter</kbd> 跳过本句剩余字
-    <kbd>←</kbd><kbd>→</kbd> 挪 0.3 秒
-    <kbd>R</kbd> 本句重来
-  </div>
+      <div class="hud">
+        <span id="hudLine"></span>
+        <span id="hudPos"></span>
+        <span id="hudState" class="hud-state">⏸ 暂停</span>
+      </div>
 
-  <div class="tip" id="tapTip"></div>
+      <div class="tip" id="tapTip"></div>
+
+      <div class="grow"></div>
+
+      <div class="keys">
+        <span class="k"><kbd>空格</kbd>播放/暂停</span>
+        <span class="k"><kbd>F</kbd>打点</span>
+        <span class="k"><kbd>Enter</kbd>收句</span>
+        <span class="k"><kbd>Backspace</kbd>退一个</span>
+        <span class="k"><kbd>Shift</kbd><kbd>Backspace</kbd>整句重来</span>
+        <span class="k">选中框边后 <kbd>←</kbd><kbd>→</kbd> 1 帧（<kbd>Shift</kbd>10 帧）</span>
+        <span class="k">未选边 <kbd>←</kbd><kbd>→</kbd> 挪播放头</span>
+        <span class="k"><kbd>↑</kbd><kbd>↓</kbd>换句</span>
+        <span class="k">拖框边 = 给大概时间，点住边再按键精调</span>
+        <span class="k"><kbd>Ctrl</kbd><kbd>Enter</kbd>跳过本句</span>
+      </div>
+    </div>
+
+    <aside class="rail" id="rail"></aside>
+  </div>
 </section>
 
 <!-- ══════════════ ③ 校验 ══════════════ -->

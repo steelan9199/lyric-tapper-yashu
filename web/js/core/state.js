@@ -15,6 +15,8 @@ export function createState() {
     lines: [],         // [{ text, chars, units, charUnit }]
     seq: [],           // [{li,ui}] 扁平打点序列
     pos: 0,            // 下一个待打单元
+    editLine: null,    // 时间轴正在编辑哪一句（null = 跟着 pos 走）
+    tlPick: null,      // 选中的框边 {ui, side:'l'|'r'}，键盘 ←/→ 改的就是它
     offsetMs: 0,       // 整体偏移（毫秒），只影响输出与显示，不改原始 t
 
     /* 校验屏 */
