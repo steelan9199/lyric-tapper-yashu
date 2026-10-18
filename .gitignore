@@ -1,6 +1,6 @@
 # Media files
 *.[mM][pP]4
-
+*.mp3
 # Local song uploads and generated lyrics
 /songs/
 
@@ -24,7 +24,6 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 Desktop.ini
-.vscode/
 .idea/
 *.swp
 *.swo
