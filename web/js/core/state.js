@@ -10,6 +10,8 @@ export function createState() {
     songName: '',      // 存档名
     dur: 0,
     peaks: null,       // Float32Array，波形用
+    /** 从 songs/ 导入的项目：{ name, audio, audioOk, stat }。新开一局时置 null */
+    imported: null,
 
     /* 轴 */
     lines: [],         // [{ text, chars, units, charUnit }]

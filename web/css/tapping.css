@@ -67,6 +67,22 @@
   border-radius: 2px;
   animation: pulse .9s ease-in-out infinite;
 }
+/* 尾字：点已经打了，正等 Enter 收句（句尾长音还在唱）。比「待打」暗一档，别再闪 */
+.line .ch.tail {
+  color: #0f1116;
+  background: #e8b184;
+}
+.line .ch.tail::after {
+  content: "";
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  bottom: -9px;
+  height: 3px;
+  background: #e8b184;
+  border-radius: 2px;
+  opacity: .55;
+}
 @keyframes pulse { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
 
 .hud {
@@ -98,6 +114,17 @@
   gap: 3px;
   white-space: nowrap;
 }
+/* 波形图例：橙线 = 字的开口（F），青绿线 = 句尾（Enter） */
+.keys .lg {
+  display: inline-block;
+  width: 3px;
+  height: 12px;
+  border-radius: 1px;
+  margin: 0 3px 0 4px;
+  vertical-align: -1px;
+}
+.keys .lg.mark { background: rgba(224, 99, 47, .85); }
+.keys .lg.end { background: #35c08f; }
 .hud-state { font-family: var(--mono); color: var(--dim); }
 .hud-state.playing { color: var(--ok); }
 .tip { flex: 0 0 auto; text-align: center; padding: 0 18px 14px; color: var(--acc2); font-size: 13px; min-height: 22px; }

@@ -12,7 +12,8 @@ import { tokenize, splitLyrics } from '../web/js/core/text.js';
 import {
   buildLines, rebuildSeq, tapCurrent, undoStep, skipRestOfLine,
   clearLine, lineSpan, stampOf, currentRef, setLineEnd, unitSpans, MAX_UNIT_DUR,
-  previewSpans, fillLineEven, setUnitStart, setUnitEnd, MIN_UNIT,
+  pendingCloseLine, endLineTarget, lineAtTime,
+  previewSpans, fillLineEven, setUnitStart, setUnitEnd, MIN_UNIT, applySavedTaps,
 } from '../web/js/core/lines.js';
 import { buildSongJson } from '../web/js/export/songJson.js';
 import { FPS, FRAME, frames } from '../web/js/core/time.js';
@@ -197,6 +198,91 @@ test('一个字都没打的句子收不了句', () => {
   assert.equal(setLineEnd(s, 0, 5), null);
 });
 
+/* ══════════ 收句落点：打完最后一个字后光标已经到下一句 ══════════ */
+test('打完本句最后一个字后，pendingCloseLine 指回本句（Enter 不会打到下一句）', () => {
+  const s = makeState('再给我两份葱\n下一句');
+  tapAll(s, [0.5, 0.9, 1.3, 1.7, 2.1, 2.5]);
+  assert.equal(currentRef(s).li, 1, '光标已经落到第 2 句');
+  assert.equal(pendingCloseLine(s), 0, '待收句的应该是第 1 句');
+  // 按「待收句」那一句收：尾音 3 秒要能落进 end 和末字的 e
+  setLineEnd(s, pendingCloseLine(s), 5.5);
+  const L = buildSongJson(s).lyrics[0];
+  assert.equal(L.end, 5.5);
+  assert.equal(L.words.at(-1).e, 5.5);
+});
+
+test('句子没打满 / 已经收过句时，pendingCloseLine 不再指着它', () => {
+  const s = makeState('灯一盏\n下一句');
+  tapAll(s, [1.0, 1.5]);
+  assert.equal(pendingCloseLine(s), null, '本句还有字没打，不算待收句');
+  tapAll(s, [2.0]);
+  assert.equal(pendingCloseLine(s), 0);
+  setLineEnd(s, 0, 4.0);
+  assert.equal(pendingCloseLine(s), null, '收过句就不再等 Enter');
+});
+
+test('已经往下打下一句了，就不能再占着屏幕等上一句的 Enter', () => {
+  const s = makeState('灯一盏\n下一句');
+  tapAll(s, [1.0, 1.5, 2.0]);
+  assert.equal(pendingCloseLine(s), 0);
+  tapCurrent(s, 4.0);            // 没按 Enter，直接接着打下一句
+  assert.equal(pendingCloseLine(s), null, '画面该让给正在打的那句');
+  assert.equal(endLineTarget(s), 1);
+});
+
+test('最后一句打满也能等到 Enter，不会提前进校验', () => {
+  const s = makeState('灯一盏');
+  tapAll(s, [1.0, 1.5, 2.0]);
+  assert.equal(currentRef(s), null);
+  assert.equal(pendingCloseLine(s), 0);
+  setLineEnd(s, 0, 4.2);
+  assert.equal(buildSongJson(s).lyrics[0].words.at(-1).e, 4.2);
+});
+
+test('收早了要覆盖：光标已在下一句、还没打点时，Enter 仍落回上一句', () => {
+  const s = makeState('灯一盏\n下一句');
+  tapAll(s, [1.0, 1.5, 2.0]);
+  assert.equal(endLineTarget(s), 0);
+  setLineEnd(s, 0, 2.2);
+  assert.equal(endLineTarget(s), 0, '还没开始打下一句，覆盖的是上一句');
+  setLineEnd(s, endLineTarget(s), 4.0);
+  assert.equal(buildSongJson(s).lyrics[0].words.at(-1).e, 4.0);
+});
+
+test('已经开始打下一句时，Enter 收的是下一句', () => {
+  const s = makeState('灯一盏\n下一句');
+  tapAll(s, [1.0, 1.5, 2.0]);
+  setLineEnd(s, 0, 2.4);
+  tapCurrent(s, 5.0);            // 第 2 句第一个字
+  assert.equal(endLineTarget(s), 1);
+});
+
+test('收过句后，时间轴上尾字画到真实句尾，不再是一小截草案宽度', () => {
+  const s = makeState('灯一盏');
+  tapAll(s, [1.0, 1.5, 2.0]);
+  assert.ok(previewSpans(s, 0)[2].e - 2.0 < 0.5, '没收句前是草案短块');
+  setLineEnd(s, 0, 5.0);
+  assert.equal(previewSpans(s, 0)[2].e, 5.0);
+});
+
+/* ══════════ 播全段：大字跟着音乐换句 ══════════ */
+test('lineAtTime 按当前时刻选中该唱的那一句', () => {
+  const s = makeState('一\n二\n三');           // 一句一个字，时间点是确定的
+  tapAll(s, [1.0, 4.0, 7.0]);
+  assert.equal(lineAtTime(s, 0), 0, '还没开口也显示第一句');
+  assert.equal(lineAtTime(s, 1.0), 0);
+  assert.equal(lineAtTime(s, 3.9), 0, '第一句唱完、第二句还没开口 → 仍停第一句');
+  assert.equal(lineAtTime(s, 4.0), 1);
+  assert.equal(lineAtTime(s, 6.0), 1);
+  assert.equal(lineAtTime(s, 9.9), 2, '最后一句之后仍停在最后一句');
+});
+
+test('没打点的句子跳过，不会把大字抢走', () => {
+  const s = makeState('第一句\n第二句\n第三句');
+  tapAll(s, [1.0, 1.5]);                 // 只有第一句打了
+  assert.equal(lineAtTime(s, 8), 0);
+});
+
 /* ══════════ 缝隙：长停顿不该把前一个字拉亮到底 ══════════ */
 test('两个字的间隔超过上限时，前一个字的 e 被收住', () => {
   const s = makeState('灯一盏');
@@ -285,4 +371,83 @@ test('拖动后导出仍然逐字单调、且终点不超过下一个字', () =>
   const words = buildSongJson(s).lyrics[0].words.filter(Boolean);
   for (let i = 1; i < words.length; i++) assert.ok(words[i].t >= words[i - 1].t);
   for (let i = 1; i < words.length; i++) assert.ok(words[i - 1].e <= words[i].t + 1e-6);
+});
+
+/* ══════════ 导入已有项目：applySavedTaps ══════════ */
+
+test('存档往返：导出 → 导入，逐字时间一点不差', () => {
+  const s = makeState('再给我两份葱\n下一句');
+  tapAll(s, [0.166, 0.622, 1.033, 1.597, 2.05, 2.51]);
+  setLineEnd(s, 0, 5.21);
+  tapAll(s, [6.0, 6.5]);
+  setLineEnd(s, 1, 7.4);
+  const out = buildSongJson(s);
+
+  const lines = buildLines('再给我两份葱\n下一句');
+  const stat = applySavedTaps(lines, out, 0);
+  assert.equal(stat.lines, 2);
+  assert.equal(stat.ends, 2);
+
+  const again = buildSongJson({ lines, offsetMs: 0, dur: 30 });
+  assert.deepEqual(again.lyrics.map(L => [L.start, L.end]), out.lyrics.map(L => [L.start, L.end]));
+  out.lyrics.forEach((L, li) => assert.deepEqual(again.lyrics[li].words, L.words));
+});
+
+test('带整体偏移的存档：贴回来要减掉偏移', () => {
+  const s = makeState('分手吧', 40);
+  tapAll(s, [1.0, 1.5, 2.0]);
+  setLineEnd(s, 0, 4.0);
+  s.offsetMs = 120;
+  const out = buildSongJson(s);          // t = 1.12 / 1.62 / 2.12，end = 4.12
+
+  const lines = buildLines('分手吧');
+  applySavedTaps(lines, out, 120);
+  assert.deepEqual(lines[0].units.map(u => u.t), [1.0, 1.5, 2.0]);
+  assert.equal(lines[0].endT, 4.0);
+});
+
+test('endManual:false 的估价句尾不恢复，留给公式重算', () => {
+  const lines = buildLines('分手吧');
+  const stat = applySavedTaps(lines, {
+    lyrics: [{
+      text: '分手吧', end: 4, endManual: false,
+      words: [{ w: '分', t: 1, e: 1.2 }, { w: '手', t: 1.5, e: 2 }, { w: '吧', t: 2, e: 4 }],
+    }],
+  }, 0);
+  assert.equal(stat.ends, 0);
+  assert.equal(lines[0].endT, null, '没按过 Enter 的句子不该凭空长出句尾');
+});
+
+test('老存档没写 endManual：当成「人标过的」恢复句尾', () => {
+  const lines = buildLines('分手吧');
+  applySavedTaps(lines, {
+    lyrics: [{
+      text: '分手吧', end: 4,
+      words: [{ w: '分', t: 1, e: 1.2 }, { w: '手', t: 1.5, e: 2 }, { w: '吧', t: 2, e: 4 }],
+    }],
+  }, 0);
+  assert.equal(lines[0].endT, 4);
+});
+
+test('歌词改过（行数对不上）时能贴多少贴多少，不报错', () => {
+  const lines = buildLines('分手吧\n下一句');
+  const stat = applySavedTaps(lines, {
+    lyrics: [{
+      text: '分手吧', end: 4, endManual: true,
+      words: [{ w: '分', t: 1, e: 1.2 }, { w: '手', t: 1.5, e: 2 }, { w: '吧', t: 2, e: 4 }],
+    }],
+  }, 0);
+  assert.equal(stat.lines, 1);
+  assert.equal(stat.units, 3);
+  assert.ok(lines[1].units.every(u => u.t == null), '多出来的句子保持空着');
+});
+
+test('导出的每句都带 endManual，标明句尾是人标的还是估的', () => {
+  const s = makeState('分手吧\n下一句');
+  tapAll(s, [1.0, 1.5, 2.0]);
+  setLineEnd(s, 0, 4.0);
+  tapAll(s, [6, 6.5, 7]);
+  const out = buildSongJson(s).lyrics;
+  assert.equal(out[0].endManual, true);
+  assert.equal(out[1].endManual, false);
 });

@@ -14,6 +14,13 @@ import { FPS } from '../core/time.js';
 /** 拖拽时吸附到帧：成片 30fps，比一帧更细的值渲染时会被吞掉 */
 const snap = t => Math.round(t * FPS) / FPS;
 
+/**
+ * 移动多少像素才算「拖」。
+ * 抓取带 11px 宽，只想选中却手抖 1~2px 是常态 ——
+ * 低于这个阈值一律当「点选」，不写 state（否则点一下就把整句落成均分猜测值）。
+ */
+const DRAG_THRESHOLD = 3;
+
 export function mountTimeline(root, { onDragStart, onDrag, onDragEnd, onPick, onPickEdge }) {
   let key = '';
   let boxes = [];
@@ -70,19 +77,31 @@ export function mountTimeline(root, { onDragStart, onDrag, onDragEnd, onPick, on
 
     e.preventDefault();
     const side = h.dataset.side;
-    // 点住这条边 = 选中它：松手不拖也算选中，之后 ←/→ 就改它
+    // 点住这条边 = 选中它：松手不拖也算选中，之后 ←/→ 就改它。
+    // 注意：这里**不写 state**，只是选中。写值一律等真的移动了再说。
     onPickEdge && onPickEdge(ui, side);
     root.classList.add('dragging');
     box.classList.add('hot');
-    onDragStart && onDragStart(ui);
-    onDrag(ui, side, timeAt(e.clientX));
 
-    const move = ev => onDrag(ui, side, timeAt(ev.clientX));
+    const x0 = e.clientX;
+    let started = false;
+    let moved = false;
+
+    const move = ev => {
+      if (!started) {
+        if (Math.abs(ev.clientX - x0) < DRAG_THRESHOLD) return;
+        started = true;
+        // 第一次真正移动才把「均分草案」落成真实值（不拖就不写）
+        onDragStart && onDragStart(ui);
+      }
+      moved = true;
+      onDrag(ui, side, timeAt(ev.clientX));
+    };
     const up = () => {
       window.removeEventListener('pointermove', move);
       root.classList.remove('dragging');
       box.classList.remove('hot');
-      onDragEnd && onDragEnd(ui, side);
+      if (moved) onDragEnd && onDragEnd(ui, side);
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up, { once: true });

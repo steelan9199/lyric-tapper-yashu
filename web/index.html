@@ -38,8 +38,12 @@
           <input id="name" spellcheck="false" placeholder="留空则用音频文件名">
         </label>
         <div class="fld">
-          <span>已有轴</span>
-          <div id="resume" class="resume"><em>读不到存档列表</em></div>
+          <span class="fld-hd">
+            导入已有项目
+            <button id="reload" class="mini" type="button" title="重新读一遍 songs/ 目录">刷新</button>
+          </span>
+          <div id="resume" class="resume"><em>读取中…</em></div>
+          <p class="fld-note">点一下接回音频、歌词、逐字点和句尾，接着改。</p>
         </div>
       </div>
     </div>
@@ -93,6 +97,7 @@
         <span class="k"><kbd>↑</kbd><kbd>↓</kbd>换句</span>
         <span class="k">拖框边 = 给大概时间，点住边再按键精调</span>
         <span class="k"><kbd>Ctrl</kbd><kbd>Enter</kbd>跳过本句</span>
+        <span class="k"><i class="lg mark"></i>字开口 <i class="lg end"></i>句尾</span>
       </div>
     </div>
 

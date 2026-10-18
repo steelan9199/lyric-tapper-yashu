@@ -27,17 +27,21 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* 波形：指针变成十字，表示可以点/拖定位 */
+/* 波形：指针变成十字，表示可以点/拖定位。
+   高度只在这里定一次（--wave-h），canvas 跟着走；波形是按高度等比画的，
+   所以改这一处，两屏的波形一起变高，竖线/底色不用另调。 */
+:root { --wave-h: 172px; }
+
 .wavebox {
   position: relative;
-  height: 86px;
+  height: var(--wave-h);
   flex: 0 0 auto;
   background: #101216;
   border-bottom: 1px solid var(--line);
   cursor: crosshair;
   overflow: hidden;
 }
-.wavebox canvas { display: block; width: 100%; height: 86px; }
+.wavebox canvas { display: block; width: 100%; height: var(--wave-h); }
 
 #playhead, #playhead2 {
   position: absolute;

@@ -25,6 +25,51 @@ export function rebuildSeq(state) {
 
 export const currentRef = state => state.seq[state.pos] || null;
 
+/**
+ * 把一份存档（song.json 的 data）贴回刚 buildLines 出来的 lines 上 —— 导入已有项目用。
+ * 纯函数，不碰 DOM/音频，所以在 node 里能直接测。
+ *
+ * 存档里的 t / end 是「已加过整体偏移」的输出值，贴回来要减掉偏移，
+ * 否则一边偏移 0 一边偏移 50ms，再存一次就整体漂了。
+ * end 只在 endManual 为真（或老文件没写这个字段）时恢复成句尾，
+ * 公式估出来的那截留给 buildSongJson 重算 —— 不然波形上会凭空多出一堆青绿线。
+ *
+ * @returns {{ lines:number, units:number, ends:number }} 实际恢复了几句 / 几个字 / 几个句尾
+ */
+export function applySavedTaps(lines, data, offsetMs = 0) {
+  const off = (Number(offsetMs) || 0) / 1000;
+  const rows = (data && data.lyrics) || [];
+  const stat = { lines: 0, units: 0, ends: 0 };
+
+  rows.forEach((src, li) => {
+    const L = lines[li];
+    if (!L) return;
+    const w = src.words || [];
+
+    let hitAny = false;
+    L.units.forEach(u => {
+      const hit = w[u.chars[0]];
+      const t = hit && Number.isFinite(+hit.t) ? +hit.t : null;
+      if (t == null) return;
+      u.t = +Math.max(0, t - off).toFixed(3);
+      hitAny = true;
+      stat.units++;
+    });
+    if (!hitAny) return;
+    stat.lines++;
+
+    const e = Number(src.end);
+    const manual = src.endManual === undefined ? Number.isFinite(e) : !!src.endManual;
+    if (manual && Number.isFinite(e)) {
+      const first = Math.min(...L.units.filter(u => u.t != null).map(u => u.t));
+      L.endT = +Math.max(first + 0.1, e - off).toFixed(3);
+      stat.ends++;
+    }
+  });
+
+  return stat;
+}
+
 export const unitOf = (state, ref) => (ref ? state.lines[ref.li].units[ref.ui] : null);
 
 /** 单元的真实时间（已加整体偏移） */
@@ -74,6 +119,69 @@ export function setLineEnd(state, li, t) {
   const v = +Math.max(first + 0.1, t).toFixed(3);
   L.endT = v;
   return { li, end: v, dur: +(v - first).toFixed(3) };
+}
+
+/**
+ * 「字都打满了、但还没按 Enter 收句」的那一句。
+ *
+ * 光标是按字顺序线性前进的：打完一句最后一个字，光标就已经落到下一句第一个字上。
+ * 如果收句只认「光标所在的句子」，Enter 就会打到下一句（一个字都没打 → 直接失败），
+ * 本句的句尾永远定不下来，最后那个字只能被 1.4 秒上限掐断 ——
+ * 而句尾恰恰是最容易拖 2~5 秒的长音。
+ *
+ * 所以规矩是：紧邻的上一句只要「字都打满、且还没收过句」，Enter 先归它。
+ * 返回该句下标；没有就返回 null。
+ */
+export function pendingCloseLine(state) {
+  const ref = currentRef(state);
+  const li = ref ? ref.li : state.lines.length; // 全打完了光标越界，按「最后一句之后」算
+  const prev = state.lines[li - 1];
+  if (!prev || prev.endT != null) return null;
+
+  // 已经在往下打了（下一句有字落点）→ 不再占着屏幕，别把正在打的那句挤掉
+  if (ref && state.lines[li].units.some(u => u.t != null)) return null;
+
+  const full = prev.units.length > 0 && prev.units.every(u => u.t != null);
+  return full ? li - 1 : null;
+}
+
+/**
+ * 按 Enter 时，这一下「收句」应该记到哪一句上。
+ *
+ * 光标是按字顺序线性前进的，打完一句最后一个字，光标就已经落到下一句开头了。
+ * 所以按优先级找：
+ *   ① 刚打满、还没收句的那一句（正常收尾，最常见）
+ *   ② 光标所在句一个字都还没打、而上一句已经打过点 → 上一句（收早了要覆盖 / 补收）
+ *   ③ 光标所在的句子（句子打到一半就收，合法但少见）
+ */
+export function endLineTarget(state) {
+  const pend = pendingCloseLine(state);
+  if (pend != null) return pend;
+
+  const ref = currentRef(state);
+  if (!ref) return state.lines.length - 1;
+
+  const L = state.lines[ref.li];
+  if (L && !L.units.some(u => u.t != null)) {
+    const prev = state.lines[ref.li - 1];
+    if (prev && prev.units.some(u => u.t != null)) return ref.li - 1;
+  }
+  return ref.li;
+}
+
+/**
+ * 某个时刻「唱到第几句」：取首字起点最晚且已开口（≤ t）的那一句。
+ * t 用原始打点口径（playhead 减去整体偏移），和 unit.t 一致。
+ * 还没开口 / 一句都没打时返回 0 —— 界面上总得显示一句。
+ * 校验屏播全段时，中间那行大字靠它跟着音乐换句。
+ */
+export function lineAtTime(state, tLocal) {
+  let li = 0;
+  for (let i = 0; i < state.lines.length; i++) {
+    const first = state.lines[i].units.find(u => u.t != null);
+    if (first && first.t <= tLocal + 1e-6) li = i;
+  }
+  return li;
 }
 
 /**
@@ -170,6 +278,16 @@ export function previewSpans(state, li) {
   // 先给「有 t 没 e」的补一个临时终点，好让后面的等分有参照
   for (let k = 0; k < n; k++) {
     if (sp[k] && sp[k].e == null) sp[k].e = sp[k].t + EVEN_STEP;
+  }
+
+  // 已经按 Enter 收过句：最后一个字的终点用真实句尾（上限 4.2 秒），
+  // 否则句尾长音在时间轴上会画成一小截，跟听到的对不上
+  if (L.endT != null) {
+    for (let k = n - 1; k >= 0; k--) {
+      if (!sp[k]) continue;
+      if (L.units[k].e == null) sp[k].e = Math.min(L.endT, sp[k].t + MAX_UNIT_DUR * 3);
+      break;
+    }
   }
 
   // 空档：在前后锚点之间等分；尾部没有锚点就按 0.33s 顺排

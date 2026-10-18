@@ -94,7 +94,9 @@ export function buildSongJson(state, meta = {}) {
       return { w: c, t: r3(tt), e: r3(Math.min(ue, Math.max(tt + 0.06, tt + slice))) };
     });
 
-    lyrics.push({ text: L.text, start: r3(start), end: r3(end), words });
+    // endManual：这句的 end 是人按 Enter 标的（true）还是公式估的（false）。
+    // 导入存档时只认「人标的」终点，估出来的那截重新算就行。
+    lyrics.push({ text: L.text, start: r3(start), end: r3(end), endManual: manEnd != null, words });
   });
 
   return {

@@ -11,21 +11,25 @@ const C = {
   markFar: 'rgba(224,99,47,.22)',
   band: 'rgba(224,99,47,.13)',
   bandEdge: 'rgba(224,99,47,.55)',
+  end: 'rgba(61,215,155,.92)',     // 句尾（Enter 收句）：青绿，和打点的橙一眼分开
 };
 
 /**
  * @param canvas  目标画布
- * @param vm      { dur, peaks, marks:[{t, sel}], focus:{s,e}|null }
+ * @param vm      { dur, peaks, marks:[{t, sel}], ends:[t], focus:{s,e}|null }
  */
 export function paintWave(canvas, vm) {
   if (!canvas || !canvas.clientWidth) return;
 
   const dpr = window.devicePixelRatio || 1;
   const w = canvas.clientWidth;
-  const h = canvas.clientHeight || 86;
-  if (canvas.width !== Math.round(w * dpr)) {
-    canvas.width = Math.round(w * dpr);
-    canvas.height = Math.round(h * dpr);
+  const h = canvas.clientHeight || 172;
+  // 宽和高都要盯：只盯宽的话，改 CSS 高度之后画布位图还是旧高度，波形会被拉扁
+  const bw = Math.round(w * dpr);
+  const bh = Math.round(h * dpr);
+  if (canvas.width !== bw || canvas.height !== bh) {
+    canvas.width = bw;
+    canvas.height = bh;
   }
 
   const g = canvas.getContext('2d');
@@ -83,6 +87,17 @@ export function paintWave(canvas, vm) {
         lastX = x;
         g.fillRect(x, mid - h * 0.46, m.sel ? 2 : 1, h * 0.92);
       }
+    }
+
+    // 句尾：按 Enter 收句记下的那一刻。
+    // 橙线 = 字的开口（F），青绿整条 + 顶部小横杠 = 一句唱完了（Enter）。
+    // 颜色和高度都刻意不同 —— 两种线混成一色，就分不清「字」和「句」了。
+    g.fillStyle = C.end;
+    for (const e of vm.ends || []) {
+      const x = Math.round((e / dur) * w);
+      if (x < 0 || x >= w) continue;
+      g.fillRect(x, 0, 2, h);
+      g.fillRect(Math.max(0, x - 4), 0, 10, 4);
     }
   }
 }

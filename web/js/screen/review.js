@@ -6,7 +6,7 @@
  */
 import { FRAME } from '../core/time.js';
 import { $, setText } from '../core/dom.js';
-import { stampOf, lineSpan, clearLine } from '../core/lines.js';
+import { stampOf, lineSpan, clearLine, lineAtTime } from '../core/lines.js';
 import { mountLine, paintAtTime } from '../view/lineView.js';
 import { paintWave, movePlayhead, onSeekDrag } from '../view/waveform.js';
 import { renderTable } from '../view/reviewTable.js';
@@ -29,6 +29,10 @@ export function createReviewScreen(ctx) {
     msgEl.textContent = text;
   };
 
+  /** 「中间那行大字跟着播放位置换句」总开关。
+   *  一旦你手动点句 / 按 ↑↓ / 选某个字，就先听你的（关掉）；重新点播放或按空格继续再打开。 */
+  let follow = true;
+
   /* ── 绘制 ── */
   function paintWaveNow() {
     if (!state.dur) return;
@@ -40,10 +44,16 @@ export function createReviewScreen(ctx) {
         sel: Boolean(state.pick && state.pick.li === li && state.pick.ui === ui),
       });
     }));
+    // 句尾（Enter 收句的位置）用青绿另画一条，跟打点的橙线分开
+    const off = state.offsetMs / 1000;
+    const ends = state.lines
+      .filter(L => L.endT != null)
+      .map(L => +(L.endT + off).toFixed(3));
     paintWave(wave, {
       dur: state.dur,
       peaks: state.peaks,
       marks,
+      ends,
       focus: lineSpan(state, state.revLine),
     });
   }
@@ -56,11 +66,14 @@ export function createReviewScreen(ctx) {
   }
 
   function renderTableNow() {
+    // 表格是整块重建的，不记住滚动位置的话，一换句就跳回顶部（长歌词很难受）
+    const keep = table.scrollTop;
     renderTable(table, {
       state,
       onSelect(li) {
         state.revLine = li;
         state.pick = null;
+        follow = false;                 // 手动选句 = 我要看这句，别被播放位置抢走
         renderTableNow();
         paintLine(player.t);
       },
@@ -68,6 +81,7 @@ export function createReviewScreen(ctx) {
       onRedo: li => gotoRedo(li),
       onPick(li, ui, wasOn) {
         state.pick = wasOn ? null : { li, ui };
+        follow = false;
         renderTableNow();
         const u = state.lines[li].units[ui];
         if (u.t != null) {
@@ -76,9 +90,30 @@ export function createReviewScreen(ctx) {
         }
       },
     });
+    table.scrollTop = keep;
   }
 
   /* ── 播放 ── */
+  /**
+   * 播放中，中间那行大字跟着音乐换句。
+   * 三种情况故意不跟：
+   *   ① 暂停 —— 停下来就是要看这一句；
+   *   ② 单听某句（stopAt 有值）—— 从这句前 0.35 秒起播，跟的话会被上一句抢走；
+   *   ③ 选中了某个字（pick）—— 正在单听这个字。
+   */
+  function followPlayhead(t) {
+    if (!follow || player.paused || state.pick || state.stopAt != null) return;
+
+    const tl = t - state.offsetMs / 1000;    // 和逐字 t 同一口径（原始打点值）
+    const li = lineAtTime(state, tl);
+    if (li === state.revLine) return;
+
+    state.revLine = li;
+    renderTableNow();                       // 表格里那一行的高亮一起走
+    const sel = table.querySelector('.tRow.body.sel');
+    if (sel && sel.scrollIntoView) sel.scrollIntoView({ block: 'nearest' });
+  }
+
   function playLine(li) {
     const sp = lineSpan(state, li);
     state.revLine = li;
@@ -114,6 +149,7 @@ export function createReviewScreen(ctx) {
   const stepLine = d => {
     state.revLine = Math.min(state.lines.length - 1, Math.max(0, state.revLine + d));
     state.pick = null;
+    follow = false;
     renderTableNow();
     paintLine(player.t);
   };
@@ -122,6 +158,7 @@ export function createReviewScreen(ctx) {
   function begin() {
     state.pick = null;
     state.stopAt = null;
+    follow = true;
     setText($('#revName'), state.songName);
     off.value = state.offsetMs;
     setText($('#offsetV'), state.offsetMs + ' ms');
@@ -137,9 +174,12 @@ export function createReviewScreen(ctx) {
     player.pause();
     nav.show('tapping');
   };
-  $('#playSeg').onclick = () => playLine(state.revLine);
+  $('#playSeg').onclick = () => { follow = true; playLine(state.revLine); };
   $('#playAll').onclick = () => {
     state.stopAt = null;
+    state.pick = null;          // 播全段 = 从头听到尾，不再盯着某个字
+    follow = true;              // 从头听就重新跟着走
+    renderTableNow();
     player.seek(0);
     player.play().catch(() => {});
   };
@@ -158,6 +198,7 @@ export function createReviewScreen(ctx) {
     if (!state.dur) return;
     player.seek(ratio * state.dur, state.dur);
     state.stopAt = null;
+    follow = true;              // 拖到哪就从哪听，跟着走
     player.play().catch(() => {});
     paintLine(player.t);
   });
@@ -200,6 +241,7 @@ export function createReviewScreen(ctx) {
     tick(t) {
       setText(clock, t.toFixed(3));
       movePlayhead(head, t, state.dur);
+      followPlayhead(t);
       paintLine(t);
       if (state.stopAt != null && t >= state.stopAt) {
         player.pause();
@@ -210,6 +252,7 @@ export function createReviewScreen(ctx) {
       if (e.code === 'Space') {
         if (player.paused) {
           state.stopAt = null;
+          follow = true;        // 继续播放 = 接着跟
           player.play().catch(() => {});
         } else {
           player.pause();

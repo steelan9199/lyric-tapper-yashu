@@ -64,9 +64,11 @@ button.mini:hover { color: var(--tx); background: #2a303a; }
 
 #lyr { height: 190px; resize: none; font-family: var(--mono); font-size: 14px; line-height: 1.9; }
 
+.fld-note { margin: 0; color: var(--dim); font-size: 11.5px; line-height: 1.6; }
+
 .resume {
   min-height: 70px;
-  max-height: 150px;
+  max-height: 168px;
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -75,16 +77,38 @@ button.mini:hover { color: var(--tx); background: #2a303a; }
 }
 .resume em { color: var(--dim); font-style: normal; font-size: 13px; padding: 8px; display: block; }
 
+/* 一条存档 = 一首歌。名字一行，时长 / 句数 / 时间一行，右边一个「导入 →」 */
 .rItem {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
-  padding: 6px 9px;
+  gap: 10px;
+  padding: 7px 9px;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 13px;
+  border: 1px solid transparent;
 }
-.rItem:hover { background: #1e2229; }
-.rItem span { color: var(--dim); font-size: 11.5px; font-family: var(--mono); white-space: nowrap; }
-.rItem .rName { color: var(--tx); font-family: inherit; font-size: 13px; }
+.rItem:hover { background: #1e2229; border-color: #2d3542; }
+.rItem:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
+.rItem .rMain { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.rItem .rName {
+  color: var(--tx);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rItem .rMeta { color: var(--dim); font-size: 11.5px; font-family: var(--mono); white-space: nowrap; }
+.rItem .rGo {
+  flex: 0 0 auto;
+  color: var(--acc);
+  font-size: 12px;
+  opacity: .55;
+  white-space: nowrap;
+}
+.rItem:hover .rGo { opacity: 1; }
+.rItem .rTag { color: #e0a24a; font-family: inherit; }
+
+/* 正在导入的那条，给个明确的进度感 */
+.rItem.busy { opacity: .55; pointer-events: none; }
+.resume .rFoot { color: var(--dim); font-size: 11px; padding: 4px 9px 2px; font-family: var(--mono); }

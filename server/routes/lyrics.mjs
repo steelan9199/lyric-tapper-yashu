@@ -5,7 +5,7 @@
 import { MAX_JSON_BYTES } from '../config.mjs';
 import { readBody, sendJson } from '../lib/http.mjs';
 import { safeBase } from '../lib/naming.mjs';
-import { listLyrics, loadLyrics, saveLyrics } from '../storage/songs.mjs';
+import { listLyrics, loadLyrics, saveLyrics, resolveAudioName } from '../storage/songs.mjs';
 
 /** POST /api/save  { name, data } */
 async function save(req, res) {
@@ -13,6 +13,11 @@ async function save(req, res) {
   const { name, data } = JSON.parse(body.toString('utf8') || '{}');
   if (!data || !Array.isArray(data.lyrics)) {
     return sendJson(res, 400, { ok: false, error: 'data.lyrics 缺失' });
+  }
+  // 音频名统一成磁盘上的真名：浏览器给的是 xx.MP3，落盘被归一成 xx.mp3
+  if (data.audio) {
+    const real = await resolveAudioName(data.audio);
+    if (real) data.audio = real;
   }
   const file = await saveLyrics(name, data);
   return sendJson(res, 200, { ok: true, file });
@@ -28,7 +33,9 @@ async function load(req, res, url) {
   const name = safeBase(url.searchParams.get('name'));
   const data = await loadLyrics(name);
   if (!data) return sendJson(res, 404, { ok: false, error: '没有这份轴：' + name });
-  return sendJson(res, 200, { ok: true, data });
+  // 存档里记的名字可能和磁盘上差个大小写，这里直接告诉前端「真实文件名」
+  const audioFile = data.audio ? await resolveAudioName(data.audio) : '';
+  return sendJson(res, 200, { ok: true, data, audioFile });
 }
 
 export const routes = [

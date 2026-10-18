@@ -40,9 +40,20 @@ async function upload(req, res, url) {
   return sendJson(res, 200, { ok: true, file: path.basename(dest), bytes: n });
 }
 
+/**
+ * `/songs/%E5%8F%AB...mp3` → `叫我老王八.mp3`
+ * URL.pathname 保留百分号编码，不解码的话中文名一律 404（ASCII 名字才碰巧能过）。
+ * 解码后再取 basename，顺手挡掉 ../。
+ */
+function fileOf(pathname) {
+  let p = pathname;
+  try { p = decodeURIComponent(p); } catch { /* 已经是裸字符，保持原样 */ }
+  return path.basename(p);
+}
+
 /** GET /songs/xxx.mp3 —— 必须支持 Range，否则浏览器拖动进度条失效 */
 async function stream(req, res, pathname) {
-  const hit = await statAudio(pathname);
+  const hit = await statAudio(fileOf(pathname));
   if (!hit) return sendJson(res, 404, { ok: false, error: '没有这个音频' });
 
   const { file, st } = hit;

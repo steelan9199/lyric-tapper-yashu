@@ -1,11 +1,12 @@
 /**
- * ① 载入屏：放音频、贴歌词、选存档。
- * 职责只有「把三样东西凑齐」，不参与打点。
+ * ① 载入屏：放音频、贴歌词、导入已有项目。
+ * 职责只有「把素材凑齐」，不参与打点；导入那摊事在 importPanel.js。
  */
 import { $, esc, fmtClock } from '../core/dom.js';
 import { buildLines, rebuildSeq } from '../core/lines.js';
 import { computePeaks } from '../core/peaks.js';
 import { loadLyrics, saveLyrics } from '../core/store.js';
+import { createImportPanel } from './importPanel.js';
 
 export function createSetupScreen(ctx) {
   const { state, player, api, nav } = ctx;
@@ -18,15 +19,48 @@ export function createSetupScreen(ctx) {
   const hint = $('#hint');
   const go = $('#go');
 
+  /** 当前这份轴是「导入来的、歌词还没被改过」吗 —— 决定主按钮是继续还是重开 */
+  const sameText = lines => Boolean(state.lines.length)
+    && lines.length === state.lines.length
+    && lines.every((L, i) => state.lines[i] && state.lines[i].text === L.text);
+
+  const importedTaps = () => Boolean(state.imported && state.lines.length && state.pos > 0);
+
   /* ── 提示与按钮状态 ── */
   function refreshHint() {
     const lines = buildLines(lyr.value);
     const units = lines.reduce((a, L) => a + L.units.length, 0);
-    go.disabled = !(state.file && lines.length);
+    const hasAudio = Boolean(state.file) || Boolean(state.imported && state.imported.audioOk);
+    const imp = importedTaps();
+
+    go.disabled = !(hasAudio && lines.length);
+    go.textContent = imp && sameText(lines) ? '继续改这份轴 →' : '开始打轴 →';
 
     hint.className = 'hint';
-    if (!state.file && !lines.length) hint.textContent = '先放音频，再贴歌词';
-    else if (!state.file) hint.textContent = '还差音频';
+
+    if (imp) {
+      const n = state.imported.name;
+      if (!sameText(lines)) {
+        hint.className = 'hint bad';
+        hint.textContent = `导入的《${n}》是按旧歌词打的。歌词改过 → 点按钮会按新歌词从头开始（原来的点作废）`;
+        return;
+      }
+      if (!state.imported.audioOk) {
+        hint.className = 'hint bad';
+        hint.textContent = `轴已载入《${n}》：${state.lines.length} 句 / ${state.seq.length} 个字，但音频没找到 → 把音频拖进来就能接着改`;
+        return;
+      }
+      if (state.imported.mismatch) {
+        hint.className = 'hint bad';
+        hint.textContent = `注意：拖进来的音频叫「${state.fileName}」，存档里记的是「${state.imported.audio}」。确认是同一段再点继续，不然点会对不上`;
+        return;
+      }
+      hint.textContent = `已导入《${n}》：${state.lines.length} 句 / ${state.seq.length} 个字，点右边继续改`;
+      return;
+    }
+
+    if (!hasAudio && !lines.length) hint.textContent = '先放音频，再贴歌词，或者从右边导入已有的轴';
+    else if (!hasAudio) hint.textContent = '还差音频';
     else if (!lines.length) hint.textContent = '还差歌词';
     else {
       hint.textContent = `${lines.length} 句 / ${units} 个字，预计 ${Math.ceil(units / 28)} 分钟打完`;
@@ -44,21 +78,35 @@ export function createSetupScreen(ctx) {
     state.songName = file.name.replace(/\.[^.]+$/, '');
     nameIn.value = state.songName;
 
+    // 导入存档时音频丢了，用户会在这里补一个 —— 补上就算接好了，轴还在内存里
+    if (state.imported) {
+      state.imported.audioOk = true;
+      const base = s => String(s || '').replace(/\.[^.]+$/, '').toLowerCase();
+      state.imported.mismatch = Boolean(state.imported.audio)
+        && base(state.imported.audio) !== base(file.name);
+    }
+
     player.load(URL.createObjectURL(file));
     drop.classList.add('ok');
     drop.innerHTML = `<div class="drop-t">♪ ${esc(file.name)}</div><div class="drop-s" id="dropS">读取中…</div>`;
 
-    await player.whenReady();
-    state.dur = player.dur;
+    const ok = await player.whenReady(8000);
+    state.dur = ok ? player.dur : 0;
     const ds = $('#dropS');
     if (ds) {
-      ds.textContent = `${fmtClock(state.dur)} / ${state.dur.toFixed(2)}s · ${(file.size / 1048576).toFixed(2)} MB`;
+      ds.textContent = ok
+        ? `${fmtClock(state.dur)} / ${state.dur.toFixed(2)}s · ${(file.size / 1048576).toFixed(2)} MB`
+        : '这个文件读不出时长，换一个试试';
     }
 
     computePeaks(file).then(p => { state.peaks = p; });
 
     // 音频顺手存进 songs/，MV 技能那边按名字就能取到同一段
-    api.uploadAudio(file).catch(e => console.warn('音频保存失败：' + e.message));
+    // 落盘时服务端会把后缀归一成小写（xx.MP3 → xx.mp3），所以以它返回的名字为准，
+    // 否则存档里记着一个磁盘上不存在的名字，下次导入就找不到音频了。
+    api.uploadAudio(file)
+      .then(r => { if (r && r.ok && r.file) state.fileName = r.file; })
+      .catch(e => console.warn('音频保存失败：' + e.message));
 
     refreshHint();
   }
@@ -78,6 +126,7 @@ export function createSetupScreen(ctx) {
   }));
   drop.addEventListener('drop', e => onPick(e.dataTransfer.files[0]));
   fileIn.addEventListener('change', () => onPick(fileIn.files[0]));
+
   /* ── 歌词记忆：贴过一次就不用再贴 ── */
   let saveTimer = 0;
   const remember = () => {
@@ -100,75 +149,36 @@ export function createSetupScreen(ctx) {
     if (kept) { lyr.value = kept; refreshHint(); }
   }
 
-  /* ── 已有存档 ── */
-  async function loadResume() {
-    const box = $('#resume');
-    try {
-      const j = await api.list();
-      if (!j.ok || !j.items.length) { box.innerHTML = '<em>还没有存过的轴</em>'; return; }
-      box.innerHTML = '';
-      j.items.slice(0, 20).forEach(it => {
-        const d = document.createElement('div');
-        d.className = 'rItem';
-        d.innerHTML = `<span class="rName">${esc(it.name)}</span>`
-          + `<span>${new Date(it.mtime).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>`;
-        d.onclick = () => openSaved(it.name);
-        box.appendChild(d);
-      });
-    } catch {
-      box.innerHTML = '<em>读不到存档列表</em>';
-    }
-  }
+  /* ── 导入已有项目（列表 + 接回来，都在 importPanel 里） ── */
+  const importer = createImportPanel({
+    state, player, api, nav,
+    refreshHint,
+    review: () => ctx.review,
+  });
 
-  async function openSaved(name) {
-    try {
-      const j = await api.load(name);
-      if (!j.ok) return alert(j.error);
-
-      const d = j.data;
-      state.songName = name;
-      state.offsetMs = d.offsetMs || 0;
-      nameIn.value = name;
-      lyr.value = (d.lyrics || []).map(L => L.text).join('\n');
-      saveLyrics(lyr.value);
-      if (d.audio) {
-        state.fileName = d.audio;
-        player.load(api.audioURL(d.audio));
-      }
-      state.dur = d.duration || 0;
-
-      const lines = buildLines(lyr.value);
-      (d.lyrics || []).forEach((src, li) => {
-        const L = lines[li];
-        if (!L) return;
-        const w = src.words || [];
-        L.units.forEach(u => {
-          const hit = w[u.chars[0]];
-          if (hit && Number.isFinite(+hit.t)) u.t = +hit.t - state.offsetMs / 1000;
-        });
-      });
-
-      state.lines = lines;
-      rebuildSeq(state);
-      state.pos = state.seq.length;   // 已经有轴了，定位在末尾，等人自己挑句子改
-      refreshHint();
-      nav.show('review');
-      ctx.review.begin();
-    } catch (e) {
-      alert('载入失败：' + e.message);
-    }
-  }
-
-  /* ── 开始打轴 ── */
+  /* ── 开始打轴 / 继续改 ── */
   go.addEventListener('click', () => {
     const lines = buildLines(lyr.value);
     if (!lines.length) return;
+
+    // 导入后没动歌词：直接回到那份轴上接着改。
+    // 这里绝不能重建 lines —— 重建等于把已经打好的点全删了。
+    if (importedTaps() && sameText(lines)) {
+      nav.show('review');
+      ctx.review.begin();
+      return;
+    }
+
+    // 已经有进度还点「开始打轴」= 重建 lines，已打的点全作废且不可撤销。
+    // 改了歌词更要命（字符都变了，救不回来），所以先问一句。
+    if (state.pos > 0 && !confirm('重新开始会清空已经打好的轴（不可撤销）。\n\n继续？')) return;
 
     state.lines = lines;
     state.offsetMs = 0;
     state.pos = 0;
     state.pick = null;
     state.stopAt = null;
+    state.imported = null;
     state.songName = (nameIn.value || state.songName || 'song').trim();
     rebuildSeq(state);
 
@@ -181,7 +191,7 @@ export function createSetupScreen(ctx) {
     el,
     activate() {
       refreshHint();
-      loadResume();
+      importer.refresh();
     },
     onKey() {
       return false;  // 载入屏不占用键盘

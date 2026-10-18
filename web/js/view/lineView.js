@@ -26,8 +26,9 @@ export function mountLine(box, line, key) {
   return true;
 }
 
-/** 打轴屏：已打点的字常亮，当前待打的字高亮 */
-export function paintTapped(box, line, currentUI) {
+/** 打轴屏：已打点的字常亮，当前待打的字高亮。
+ *  tailUI = 本句最后一个字「已打点、正等 Enter 收句」时，单独标出来 */
+export function paintTapped(box, line, currentUI, tailUI = -1) {
   line.chars.forEach((c, i) => {
     const node = box.children[i];
     if (!node) return;
@@ -35,7 +36,8 @@ export function paintTapped(box, line, currentUI) {
     let cls = baseCls(c);
     if (ui >= 0) {
       const u = line.units[ui];
-      if (u.t != null) cls += ' done';
+      if (ui === tailUI) cls += ' tail';
+      else if (u.t != null) cls += ' done';
       else if (ui === currentUI) cls += ' cur';
     }
     setCls(node, cls);

@@ -11,7 +11,7 @@ import { $, setText, setHTML, esc } from '../core/dom.js';
 import {
   currentRef, stampOf, tapCurrent, undoStep, skipRestOfLine, clearLine,
   lineSpan, doneCount, setLineEnd, unitSpans, previewSpans, fillLineEven,
-  setUnitStart, setUnitEnd,
+  setUnitStart, setUnitEnd, pendingCloseLine, endLineTarget,
 } from '../core/lines.js';
 import { mountLine, paintTapped } from '../view/lineView.js';
 import { paintWave, movePlayhead, onSeekDrag } from '../view/waveform.js';
@@ -39,6 +39,9 @@ export function createTappingScreen(ctx) {
   /* ── 绘制 ── */
   function focusLine() {
     if (state.editLine != null) return state.editLine;
+    // 刚打满、还没收句的那一句先留在屏幕上：句尾长音还在唱，画面不能先跳走
+    const pend = pendingCloseLine(state);
+    if (pend != null) return pend;
     const ref = currentRef(state);
     return ref ? ref.li : state.lines.length - 1;
   }
@@ -49,7 +52,12 @@ export function createTappingScreen(ctx) {
     state.lines.forEach(L => L.units.forEach(u => {
       if (u.t != null) marks.push({ t: stampOf(state, u) });
     }));
-    paintWave(wave, { dur: state.dur, peaks: state.peaks, marks, focus: lineSpan(state, focusLine()) });
+    // 句尾单独一条（青绿）：Enter 收句的位置，和打点的橙线分开看
+    const off = state.offsetMs / 1000;
+    const ends = state.lines
+      .filter(L => L.endT != null)
+      .map(L => +(L.endT + off).toFixed(3));
+    paintWave(wave, { dur: state.dur, peaks: state.peaks, marks, ends, focus: lineSpan(state, focusLine()) });
   }
 
   function paint() {
@@ -60,8 +68,11 @@ export function createTappingScreen(ctx) {
 
     // 时间轴可能停在别的句上，高亮必须按「这一句」算，不能拿错的 pos
     const curUI = ref && ref.li === li ? ref.ui : -1;
+    // 本句字都打满了、正等 Enter 收句（或等尾音唱完）→ 把最后一个字标成「待收句」
+    const pend = pendingCloseLine(state);
+    const tailUI = pend === li ? L.units.length - 1 : -1;
     mountLine(box, L, 'tap:' + li);
-    paintTapped(box, L, curUI);
+    paintTapped(box, L, curUI, tailUI);
     paintTimeline(li, L, curUI);
 
     setHTML(hudLine, `第 <b>${li + 1}/${state.lines.length}</b> 句　「${esc(L.text)}」`);
@@ -124,12 +135,13 @@ export function createTappingScreen(ctx) {
       const sp = previewSpans(state, li)[ui];
       if (sp) say(`「${state.lines[li].units[ui].text}」定住：${sp.t.toFixed(2)} → ${sp.e.toFixed(2)}s`);
     },
-    /** 点住某条边 = 选中它；之后 ←/→ 精确到 1 帧（Shift 10 帧） */
+    /** 点住某条边 = 选中它；之后 ←/→ 精确到 1 帧（Shift 10 帧）。
+     *  这里刻意**不** fillLineEven：单纯点一下不该把整句写进 state，
+     *  否则手抖蹭到边就把剩下的字全落成了均分猜测值，之后按 F 也改不回来。 */
     onPickEdge(ui, side) {
       const li = focusLine();
       state.editLine = li;
       state.tlPick = { ui, side };
-      fillLineEven(state, li);
       repaint();
       const u = state.lines[li].units[ui];
       say(`选中「${u.text}」的${side === 'l' ? '起点' : '终点'} · ←/→ 微调 1 帧（Shift 10 帧）`);
@@ -213,6 +225,12 @@ export function createTappingScreen(ctx) {
     ctx.review.begin();
   };
 
+  // 「← 返回」回载入屏。只是切屏，不动 state —— 回去改个存档名、再点「开始打轴」才会重置
+  $('#back1').onclick = () => {
+    player.pause();
+    nav.show('setup');
+  };
+
   function tap() {
     state.editLine = null;
     state.tlPick = null;
@@ -220,6 +238,14 @@ export function createTappingScreen(ctx) {
     if (!ref) return toReview();
 
     repaint();
+
+    // 这一下正好打完本句最后一个字：屏幕留在本句等 Enter，别急着跳走。
+    // 句尾那个长音（2~5 秒）就是靠这一次 Enter 记下来的。
+    const L = state.lines[ref.li];
+    if (L.units.every(u => u.t != null) && L.endT == null) {
+      say(`「${L.text}」打满了 · 尾音唱完再按 Enter 收句（句尾多长就看这一下）`);
+      return;
+    }
 
     if (!finished) {
       if (player.paused) say(`记下「${ref.unit.text}」，按空格继续播放`);
@@ -243,10 +269,10 @@ export function createTappingScreen(ctx) {
     say(`退回「${r.unit.text}」，到这儿再打一次`);
   }
 
-  /** 收句：记这一句真实的结束时间。句尾没有下一个字可推，只能这么标一次 */
+  /** 收句：记这一句真实的结束时间。句尾没有下一个字可推，只能这么标一次。
+   *  落点由 endLineTarget 决定（光标常常已经落到下一句开头了，见 core/lines.js）。 */
   function endLine() {
-    const ref = currentRef(state);
-    const li = ref ? ref.li : focusLine();
+    const li = endLineTarget(state);
     const L = state.lines[li];
     if (!L) return;
 
@@ -255,12 +281,26 @@ export function createTappingScreen(ctx) {
 
     const left = L.units.filter(u => u.t == null).length;
     repaint();
+
+    // 全部打完了：Enter 收完句尾就进校验
+    if (state.pos >= state.seq.length && left === 0) {
+      player.pause();
+      say(`收句 ${r.dur.toFixed(2)}s · 打完了，进校验`);
+      setTimeout(toReview, 450);
+      return;
+    }
+
     say(left
       ? `收句 ${r.dur.toFixed(2)}s，但本句还有 ${left} 个字没打点（Ctrl+Enter 可整句跳过）`
-      : `收句 ${r.dur.toFixed(2)}s`);
+      : `收句 ${r.dur.toFixed(2)}s · 波形上那条青绿线就是句尾，下一句接着按 F`);
   }
 
   function skipLine() {
+    // 本句已经打满了、正等 Enter 收句：没有「剩下的字」可跳，别把下一句糊掉
+    if (pendingCloseLine(state) != null) {
+      say('本句已打满，按 Enter 收句就行');
+      return;
+    }
     const n = skipRestOfLine(state, player.t);
     if (!n) return;
     repaint();
@@ -270,9 +310,12 @@ export function createTappingScreen(ctx) {
   function redoLine() {
     state.editLine = null;
     state.tlPick = null;
+    // 光标可能已经落到下一句开头：这时「这一句」指的是刚打满、还没收句的那一句
+    const pend = pendingCloseLine(state);
     const ref = currentRef(state);
-    if (!ref) return;
-    const r = clearLine(state, ref.li);
+    const li = pend != null ? pend : (ref ? ref.li : -1);
+    if (li < 0) return;
+    const r = clearLine(state, li);
     if (!r) return;
 
     const was = !player.paused;
@@ -280,7 +323,7 @@ export function createTappingScreen(ctx) {
     player.seek(r.resumeAt, state.dur);
     if (was) player.play().catch(() => {});
     repaint();
-    say(`第 ${ref.li + 1} 句重来`);
+    say(`第 ${li + 1} 句重来`);
   }
 
   /** ↑↓ 把时间轴切到上一句 / 下一句（不动播放，也不动待打位置） */
