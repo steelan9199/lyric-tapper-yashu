@@ -1,0 +1,30 @@
+# Media files
+*.[mM][pP]4
+
+# Local song uploads and generated lyrics
+/songs/
+
+# Node.js
+node_modules/
+npm-debug.log*
+
+# Local environment and logs
+.env
+.env.*
+!.env.example
+*.log
+
+# Build and test output
+/dist/
+/build/
+/coverage/
+.cache/
+
+# Operating system and editor files
+.DS_Store
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
+*.swp
+*.swo

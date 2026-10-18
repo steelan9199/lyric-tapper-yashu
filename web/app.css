@@ -1,0 +1,7 @@
+/* 样式入口：只做 @import 汇总，不要在这里写样式。
+   加一个新区域 = 新建一个 css 文件 + 在下面加一行。 */
+@import url("./tokens.css");
+@import url("./base.css");
+@import url("./setup.css");
+@import url("./tapping.css");
+@import url("./review.css");

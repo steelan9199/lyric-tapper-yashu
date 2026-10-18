@@ -1,0 +1,67 @@
+/* 三屏共用的骨架：屏切换、顶部条、波形区、提示、底部条 */
+
+.screen { display: none; height: 100vh; flex-direction: column; }
+.screen.on { display: flex; }
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  flex: 0 0 auto;
+}
+.bar-mid {
+  flex: 1;
+  color: var(--dim);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.clock {
+  font-family: var(--mono);
+  font-size: 20px;
+  color: var(--acc2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 波形：指针变成十字，表示可以点/拖定位 */
+.wavebox {
+  position: relative;
+  height: 86px;
+  flex: 0 0 auto;
+  background: #101216;
+  border-bottom: 1px solid var(--line);
+  cursor: crosshair;
+  overflow: hidden;
+}
+.wavebox canvas { display: block; width: 100%; height: 86px; }
+
+#playhead, #playhead2 {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--acc);
+  left: 0;
+  pointer-events: none;
+  box-shadow: 0 0 8px rgba(224, 99, 47, .7);
+}
+
+.row { display: flex; align-items: center; gap: 14px; margin-top: 24px; }
+
+.hint { color: var(--dim); font-size: 13px; flex: 1; }
+.hint.bad { color: var(--bad); }
+.hint.good { color: var(--ok); }
+
+.foot {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}

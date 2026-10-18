@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>本地打轴页</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<!-- ══════════════ ① 载入 ══════════════ -->
+<section id="setup" class="screen on">
+  <div class="wrap">
+    <h1>本地打轴页</h1>
+    <p class="sub">给一段 ≤1 分钟的歌曲片段打<b>逐字</b>时间轴。跟着唱按空格，一个字一下。</p>
+
+    <div id="drop" class="drop" tabindex="0">
+      <div class="drop-ico">♪</div>
+      <div class="drop-t">把音频拖进来，或点击选择</div>
+      <div class="drop-s" id="dropS">mp3 / wav / m4a / ogg / flac，≤25 MB</div>
+      <input type="file" id="file" accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac" hidden>
+    </div>
+
+    <div class="grid2">
+      <label class="fld">
+        <span>歌词（一行一句，标点照常写）</span>
+        <textarea id="lyr" spellcheck="false" placeholder="灯一盏一盏
+把夜点成河
+我数着浪
+数不到你"></textarea>
+      </label>
+      <div class="col">
+        <label class="fld">
+          <span>存档名</span>
+          <input id="name" spellcheck="false" placeholder="留空则用音频文件名">
+        </label>
+        <div class="fld">
+          <span>已有轴</span>
+          <div id="resume" class="resume"><em>读不到存档列表</em></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div id="hint" class="hint"></div>
+      <button id="go" class="primary" disabled>开始打轴 →</button>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ ② 打轴 ══════════════ -->
+<section id="tapping" class="screen">
+  <header class="bar">
+    <button id="back1" class="ghost">← 返回</button>
+    <div class="bar-mid"><span id="tapName"></span></div>
+    <div class="clock" id="clock">0.000</div>
+  </header>
+
+  <div class="wavebox">
+    <canvas id="wave"></canvas>
+    <div id="playhead"></div>
+  </div>
+
+  <div class="stage">
+    <div id="lineText" class="line"></div>
+  </div>
+
+  <div class="hud">
+    <span id="hudLine"></span>
+    <span id="hudPos"></span>
+  </div>
+
+  <div class="keys">
+    <kbd>空格</kbd> 下一个字
+    <kbd>Backspace</kbd> 退一个字（会一起回放）
+    <kbd>Enter</kbd> 跳过本句剩余字
+    <kbd>←</kbd><kbd>→</kbd> 挪 0.3 秒
+    <kbd>R</kbd> 本句重来
+  </div>
+
+  <div class="tip" id="tapTip"></div>
+</section>
+
+<!-- ══════════════ ③ 校验 ══════════════ -->
+<section id="review" class="screen">
+  <header class="bar">
+    <button id="back2" class="ghost">← 回去补打</button>
+    <div class="bar-mid"><span id="revName"></span></div>
+    <div class="clock" id="clock2">0.000</div>
+  </header>
+
+  <div class="wavebox">
+    <canvas id="wave2"></canvas>
+    <div id="playhead2"></div>
+  </div>
+
+  <div class="stage small">
+    <div id="lineText2" class="line"></div>
+  </div>
+
+  <div class="ctrl">
+    <button id="playSeg" class="ghost">▶ 播当前句</button>
+    <button id="playAll" class="ghost">▶ 播全段</button>
+    <button id="prevLine" class="ghost">↑ 上一句</button>
+    <button id="nextLine" class="ghost">↓ 下一句</button>
+    <label class="off">
+      整体偏移
+      <input type="range" id="offset" min="-200" max="200" step="5" value="0">
+      <b id="offsetV">0 ms</b>
+    </label>
+  </div>
+
+  <div id="table" class="table"></div>
+
+  <div class="foot">
+    <button id="save" class="primary">保存到 songs/</button>
+    <button id="copy" class="ghost">复制 lyrics 片段</button>
+    <button id="dl" class="ghost">下载 JSON</button>
+    <span id="saveMsg" class="hint"></span>
+  </div>
+</section>
+
+<audio id="au" preload="auto"></audio>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,66 @@
+/* 设计令牌 + 全局基础样式。改配色只改这里。
+   注意：web/js/view/waveform.js 里的波形颜色是 canvas 画的，
+   改这里的 --line / --acc 时那边要同步（文件顶部有常量表）。 */
+:root {
+  --bg: #14161a;
+  --panel: #1b1e25;
+  --panel2: #21252e;
+  --line: #2b313c;
+  --tx: #e8e6e0;
+  --dim: #8b93a1;
+  --acc: #e0632f;
+  --acc2: #f08a4b;
+  --ok: #56b37f;
+  --bad: #e26060;
+  --mono: ui-monospace, "SF Mono", Consolas, "Cascadia Mono", monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--tx);
+  font: 15px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+  overflow: hidden;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel2);
+  color: var(--tx);
+  padding: 8px 14px;
+  transition: .12s;
+}
+button:hover { background: #2a303a; border-color: #3a4250; }
+button:disabled { opacity: .35; cursor: not-allowed; }
+button.primary { background: var(--acc); border-color: var(--acc); color: #fff; font-weight: 600; }
+button.primary:hover { background: var(--acc2); border-color: var(--acc2); }
+button.ghost { background: transparent; }
+
+input, textarea {
+  font: inherit;
+  color: var(--tx);
+  background: #12141a;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 11px;
+  outline: none;
+  width: 100%;
+}
+input:focus, textarea:focus { border-color: var(--acc); }
+
+kbd {
+  font: 12px/1 var(--mono);
+  background: #12141a;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  padding: 3px 6px;
+  margin: 0 2px;
+  color: var(--dim);
+}

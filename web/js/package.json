@@ -1,0 +1,4 @@
+{
+  "//": "让 node 把 web/js 下的 .js 当 ESM，好让 scripts/test-core.mjs 直接 import 纯函数层做单测。浏览器端不读这个文件。",
+  "type": "module"
+}
